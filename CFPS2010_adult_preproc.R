@@ -83,7 +83,7 @@ SES <- SES %>%
 # select and recode mental health, fairness and attributional style
 ##MH
 MH <- dfa %>%
-  dplyr::select(qm403, qm404, fdepression)
+  dplyr::select(qm403, qm404, qk802, fdepression)
 MH[MH == -8] <- NA
 MH$qm403[MH$qm403 <0] <- NA
 MH$qm404[MH$qm404 <0] <- NA
