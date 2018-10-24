@@ -7,7 +7,7 @@
 # Cai, Y-Q    18-10-09         Only include SES and mental health, ignore physical ones
 # Cai, Y-Q    18-10-21         Add fairness and attributional styles
 # Hu, C-P     18-10-22         Review the code, change the absolute path to relative path, and other comments
-#
+# Cai, Y-Q    18-10-24         Confirm the file and change some dimensions
 ###### input######
 # [CFPS Public Data] 2010 Adult Data (ENG).tab
 # [CFPS Public Data] 2010 Family Data (ENG).tab
@@ -29,109 +29,125 @@ curWD <- dirname(rstudioapi::getSourceEditorContext()$path)
 
 # Set the working directory to the directory where this script is 
 setwd(curWD)
-#setwd("/Users/apple/Desktop/CFPS/4_analysis")
 
 # load the packages needed, if not exist, download from cran
 if (!require(tidyverse)) {install.packages("tidyverse",repos = "http://cran.us.r-project.org"); require(tidyverse)}
-if (!require(skimr)) {install.packages("skimr",repos = "http://cran.us.r-project.org"); require(skimr)}
-if (!require(userfriendlyscience)) {install.packages("userfriendlyscience",repos = "http://cran.us.r-project.org"); require(userfriendlyscience)}
-
-#install.packages("dplyr")
-#install.packages("tidyverse")
-#install.packages("skimr")
-#library("skimr")
-#library("dplyr")
-#library("tidyverse")
+if (!require(dplyr)) {install.packages("dplyr",repos = "http://cran.us.r-project.org"); require(dplyr)}
+if (!require(psych)) {install.packages("psych",repos = "http://cran.us.r-project.org"); require(psych)}
+library("psych")
+library("dplyr")
+library("tidyverse")
 
 #read data
-dfa <- read.table("[CFPS Public Data] 2010 Adult Data (ENG).tab", sep="\t",header=T)#adult 2010
+dfa <- read.table("/Users/apple/Desktop/CFPS/4_Analysis/[CFPS Public Data] 2010 Adult Data (ENG).tab", sep="\t",header=T)#adult 2010
 
 ###### get related variables
 #ID information
 persinfo <- dfa %>%
-  select(gender, qa1age)
-select
+  dplyr::select(gender, qa1age)
 
 #summarize personal informations
 summary(dfa$qa1age)  #age
 summary(dfa$gender)  #gender
-summary(dfa$qa2==1)  # HCP: what does this mean?
-summary(dfa$qa2==3)  #hukou
+summary(dfa$qa2==1)  #hukou: agriculture
+summary(dfa$qa2==3)  #hukou: non-agriculture
 
 # Select and recode SES
 SES <- dfa %>%
-  select(fid, pid, educ, wordtest, mathtest, qg307isco, qg307isei, qk601,qa7_s_1) %>%
-  mutate(qa7_s_1 = recode_factor(qa7_s_1, '1' = 1, .default = 0)) #leave only communist members
+  dplyr::select(fid, pid, educ, wordtest, mathtest, qg307isco, qg307isei, qk601,qa7_s_1) %>%
+  dplyr::mutate(qa7_s_1 = recode_factor(qa7_s_1, '1' = 1, .default = 0)) #leave only communist members
 SES[SES == -8] <- NA #missing values
-summary(SES)
+summary(SES) # check SES
 
 # set qa7_s_1 = 1 if any family member is a communist party member, else = 0
 pCap <- SES %>%
-  select(qa7_s_1, fid) %>%
-  mutate(qa7_s_1 = recode_factor(qa7_s_1, '1' = 1, .default = 0)) %>%
-  filter(qa7_s_1 == 1)
+  dplyr::select(qa7_s_1, fid) %>%
+  dplyr::mutate(qa7_s_1 = recode_factor(qa7_s_1, '1' = 1, .default = 0)) %>%
+  dplyr::filter(qa7_s_1 == 1)
 SES <- SES %>%
-  select(-qa7_s_1) %>%
-  left_join(pCap, SES, by = "fid")
+  dplyr::select(-qa7_s_1) %>%
+  dplyr::left_join(pCap, SES, by = "fid")
 SES$qa7_s_1[is.na(SES$qa7_s_1)] <- 0
 
 #delate repatitive rows
 SES <- SES %>%
-  group_by(pid) %>%
-  filter(row_number() == 1) %>%
-  ungroup()
+  dplyr::group_by(pid) %>%
+  dplyr::filter(row_number() == 1) %>%
+  dplyr::ungroup()
 
 # recode income using log10, if income =0, recode it as 0 
 SES <- SES %>%
-  mutate(qk601 = log10(qk601)) %>%
-  mutate(qk601 = recode_factor(qk601, '-Inf' = 0 ))
+  dplyr::mutate(qk601 = log10(qk601)) %>%
+  dplyr::mutate(qk601 = recode_factor(qk601, '-Inf' = 0 ))
 
 # select and recode mental health, fairness and attributional style
 ##MH
 MH <- dfa %>%
-  select(qq601, qq602, qq603, qq604, qq605, qq606, qk802, qm403, qm404)
+  dplyr::select(qm403, qm404, fdepression)
 MH[MH == -8] <- NA
+MH$qm403[MH$qm403 <0] <- NA
+MH$qm404[MH$qm404 <0] <- NA
+summary(MH)
 
 # reliability of depression scale
-depr <- MH %>%
-  select(qq601, qq602, qq603, qq604, qq605, qq606)
-
-reliability(depr,
-            items = NULL,
-            itemDiagnostics = FALSE,
-            digits = 2)
+depr <- dfa %>%
+  dplyr::select(qq601, qq602, qq603, qq604, qq605, qq606)
+depr[depr == -8 ] <- NA
+depr[depr == -2 ] <- NA
+depr[depr == -1] <- NA
+summary(depr)
+psych::alpha(depr)
+depr <- depr %>%
+  dplyr::filter(complete.cases(depr))
+#???
+stats::factanal(depr, factors=2) 
+scree(depr)
 
 ##fairness
 fair <- dfa %>%
-  select(qn201, qn202, qn203, qn204, qn205, qn206, qn207, qn208)
-fair[fair == 79] <- NA
-fair[fair == 5] <- -1 # encounter with unfair affairs? 1 = yes, -1 = no
-
+  select(qn201, qn202, qn203, qn204, qn205, qn206, qn207, qn208) 
+fair[fair < 0] <- NA
+fair[fair > 5] <- NA
+fair[fair == 5] <- 2 # encounter with unfair affairs? 1 = yes, 5 = no
+scree(fair)
+summary(fair)
+library(psych)
+fair  %>%
+  dplyr::filter(complete.cases(fair)) %>%
+  # factor analysis?
+  stats::factanal(fair, factors=1)
 # reliability of fairness scale
-# library("userfriendlyscience")
-reliability(fair,     ### Hcp: as for reliability, I suggest you can also try "psych"
-            items = NULL,
-            itemDiagnostics = FALSE,
-            digits = 2)
+psych::alpha(fair)
+
+# sum of fairness, add to MH
+MH$fairsum <- rowSums(fair)
+
 ##attribute
 attri <- dfa %>% 
-  select(qn501, qn502, qn503, qn504, qn505, qn506, qn507) # 1-4, strongly disagree - strongly agree
+  dplyr::select(qn501, qn502, qn503, qn504, qn505, qn506, qn507)  # 1-4, strongly disagree - strongly agree
+summary(attri)
 
-### hcp: i think there is a function called 'recode', you can use one line of code for the following codes
-attri[attri == -8] <- NA
-attri[attri == 1] <- -2 # 1 = strongly disagree
-attri[attri == 2] <- -1 # 2 = disagree
-attri[attri == 5] <- 0 # 5 = not agree not disagree
-attri[attri == 3] <- 1 # 2 = agree
-attri[attri == 4] <- 2 # 2 = strongly agree
-attri[attri == 6] <- NA # 6 = I don't know
+### recode attribute 1-4= strongly diagree, disagree, agree, strongly agree, 5=not agree not disagree, 6=i don't know, -8=missing value
+attri <- attri %>%
+  dplyr::mutate(qn501 = recode(qn501, '1' = -2, '2' = -1 ,'5' = 0, '3' = 1, '4' = 2, .default = -8),
+                qn502 = recode(qn502, '1' = -2, '2' = -1 ,'5' = 0, '3' = 1, '4' = 2, .default = -8),
+                qn503 = recode(qn503, '1' = -2, '2' = -1 ,'5' = 0, '3' = 1, '4' = 2, .default = -8),
+                qn504 = recode(qn504, '1' = -2, '2' = -1 ,'5' = 0, '3' = 1, '4' = 2, .default = -8),
+                qn505 = recode(qn505, '1' = -2, '2' = -1 ,'5' = 0, '3' = 1, '4' = 2, .default = -8),
+                qn506 = recode(qn506, '1' = -2, '2' = -1 ,'5' = 0, '3' = 1, '4' = 2, .default = -8),
+                qn507 = recode(qn507, '1' = -2, '2' = -1 ,'5' = 0, '3' = 1, '4' = 2, .default = -8))
+attri  %>%
+  dplyr::filter(complete.cases(attri)) %>%
+  # factor analysis?
+  stats::factanal(attri, factors=2) 
+# reliability of fairness scale
+psych::alpha(attri)
+
 
 #reliability of attribute scale
-reliability(attri,
-            items = NULL,
-            itemDiagnostics = FALSE,
-            digits = 2)
+psych::alpha(attri)
+
 # combine all the related data
-all <- cbind(persinfo, SES, MH, attri, fair)
+all <- base::cbind(persinfo, SES, MH, attri)
 # write the table
 write.csv(all, file = "sesMH.csv", row.names = FALSE)
